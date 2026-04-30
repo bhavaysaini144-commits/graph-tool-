@@ -2,378 +2,397 @@ from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
-# --- PROJECT NEWTON: THE GRAPHING ENGINE ---
+# --- NEWTON v3: SCIENTIFIC STANDARD ---
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Newton | Mathematical Engine</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
-    <!-- MATH.JS: The Calculation Brain -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Newton v3 | Scientific Engine</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;600&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- MATH ENGINE -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
     <style>
-        :root { --bg: #0d1117; --panel: #161b22; --accent: #2f81f7; --text: #c9d1d9; --grid: #30363d; }
-        body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; overflow: hidden; display: flex; height: 100vh; }
+        :root { 
+            --bg: #1e1e1e; --panel: #252526; --accent: #007acc; --text: #d4d4d4; 
+            --grid-mj: #444; --grid-mn: #333; --key-bg: #333333; --key-act: #3e3e42;
+        }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; overflow: hidden; display: flex; height: 100vh; touch-action: none; }
         
-        /* LAYOUT */
-        .sidebar { width: 320px; background: var(--panel); border-right: 1px solid var(--grid); display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; z-index: 10; }
-        .viewport { flex: 1; position: relative; overflow: hidden; cursor: crosshair; }
-        
-        /* INPUT AREA */
-        .input-group { margin-bottom: 15px; }
-        .label { font-size: 12px; font-weight: 600; color: #8b949e; margin-bottom: 5px; display: block; }
+        /* SIDEBAR LAYOUT */
+        .sidebar { 
+            width: 360px; background: var(--panel); border-right: 1px solid #000; 
+            display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; z-index: 20; 
+            box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+        }
+
+        /* HEADER & INPUT */
+        .header { font-size: 12px; font-weight: 800; color: #666; letter-spacing: 2px; margin-bottom: 10px; display: flex; justify-content: space-between; }
+        .status { font-size: 10px; color: #4fc1ff; }
+        .status.err { color: #f48771; }
+
+        .input-wrapper { position: relative; margin-bottom: 15px; }
+        .fn-label { position: absolute; left: 10px; top: 12px; font-family: 'Roboto Mono'; color: #007acc; font-weight: bold; pointer-events: none; }
         input[type="text"] {
-            width: 100%; background: #0d1117; border: 1px solid var(--grid); color: #fff;
-            padding: 12px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 16px;
+            width: 100%; background: #1e1e1e; border: 1px solid #3c3c3c; color: #fff;
+            padding: 12px 10px 12px 50px; border-radius: 4px; font-family: 'Roboto Mono', monospace; font-size: 16px;
             box-sizing: border-box; outline: none; transition: 0.2s;
         }
-        input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(47, 129, 247, 0.3); }
-        
-        /* KEYPAD */
-        .keypad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
+        input[type="text"]:focus { border-color: var(--accent); background: #2d2d2d; }
+
+        /* SCIENTIFIC KEYPAD */
+        .keypad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 15px; }
         .key {
-            background: #21262d; border: 1px solid rgba(240,246,252,0.1); color: #fff;
-            padding: 10px 0; border-radius: 6px; cursor: pointer; font-family: 'JetBrains Mono'; font-size: 13px;
-            transition: 0.1s; user-select: none;
+            background: var(--key-bg); border: none; color: #fff;
+            padding: 10px 0; border-radius: 2px; cursor: pointer; font-family: 'Inter'; font-size: 11px; font-weight: 600;
+            transition: 0.1s; user-select: none; display: grid; place-items: center;
         }
-        .key:hover { background: #30363d; }
-        .key:active { background: var(--accent); border-color: var(--accent); }
-        .key.fn { color: var(--accent); font-weight: bold; }
+        .key:active { background: var(--accent); transform: translateY(1px); }
+        .key.num { background: #2d2d2d; font-size: 13px; font-family: 'Roboto Mono'; }
+        .key.op { background: #252526; border: 1px solid #3c3c3c; color: var(--accent); }
+        .key.var { color: #9cdcfe; }
+        .key.del { background: #5a2d2d; color: #ffcccc; }
+        .key.go { background: var(--accent); grid-column: span 2; }
 
-        /* VARIABLE REACTOR */
-        #variables { flex: 1; overflow-y: auto; border-top: 1px solid var(--grid); padding-top: 10px; }
-        .var-row { display: flex; align-items: center; margin-bottom: 10px; font-size: 14px; }
-        .var-name { width: 30px; font-family: 'JetBrains Mono'; font-weight: bold; color: #79c0ff; }
-        input[type="range"] { flex: 1; margin: 0 10px; accent-color: var(--accent); cursor: pointer; }
-        .var-val { width: 40px; text-align: right; font-size: 12px; }
-
-        /* CANVAS */
+        /* VARIABLE SLIDERS */
+        .var-zone { flex: 1; overflow-y: auto; border-top: 1px solid #3c3c3c; padding-top: 10px; }
+        .var-row { display: flex; align-items: center; margin-bottom: 8px; font-family: 'Roboto Mono'; font-size: 12px; background: #2d2d2d; padding: 5px; border-radius: 4px; }
+        .var-label { color: #9cdcfe; width: 30px; font-weight: bold; }
+        input[type="range"] { flex: 1; margin: 0 10px; height: 2px; accent-color: var(--accent); }
+        
+        /* CANVAS AREA */
+        .viewport { flex: 1; position: relative; cursor: crosshair; background: #121212; }
         canvas { display: block; width: 100%; height: 100%; }
         
-        /* OVERLAYS */
-        .zoom-controls { position: absolute; bottom: 20px; right: 20px; display: flex; gap: 10px; }
-        .fab { width: 40px; height: 40px; border-radius: 50%; background: var(--panel); border: 1px solid var(--grid); color: white; font-size: 20px; cursor: pointer; display: grid; place-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-        .fab:hover { background: var(--accent); }
+        /* HUD ELEMENTS */
+        .hud-coords { 
+            position: absolute; bottom: 10px; left: 10px; 
+            background: rgba(0,0,0,0.8); color: #fff; 
+            padding: 5px 10px; border-radius: 4px; font-family: 'Roboto Mono'; font-size: 11px; 
+            border: 1px solid #444; pointer-events: none; 
+        }
+        .controls { position: absolute; bottom: 10px; right: 10px; display: flex; gap: 5px; }
+        .btn-icon { width: 32px; height: 32px; background: #252526; color: white; border: 1px solid #444; border-radius: 4px; cursor: pointer; display: grid; place-items: center; font-size: 16px; }
+        .btn-icon:hover { background: var(--accent); border-color: var(--accent); }
 
-        .coords { position: absolute; top: 10px; right: 20px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 4px; font-family: 'JetBrains Mono'; font-size: 12px; pointer-events: none; }
     </style>
 </head>
 <body>
 
-<!-- SIDEBAR: INPUT & CONTROLS -->
 <div class="sidebar">
-    <div class="input-group">
-        <span class="label">FUNCTION f(x) =</span>
-        <input type="text" id="eq-input" value="sin(x) * x" placeholder="Type eq... e.g. x^2">
+    <div class="header">
+        <span>SCIENTIFIC ENGINE</span>
+        <span id="status" class="status">READY</span>
+    </div>
+    
+    <div class="input-wrapper">
+        <span class="fn-label">f(x)=</span>
+        <input type="text" id="input" value="log(x)" spellcheck="false">
     </div>
 
+    <!-- PRO KEYPAD -->
     <div class="keypad">
-        <button class="key fn" onclick="insert('sin(')">sin</button>
-        <button class="key fn" onclick="insert('cos(')">cos</button>
-        <button class="key fn" onclick="insert('tan(')">tan</button>
-        <button class="key" onclick="insert('^')">^</button>
+        <!-- Row 1 -->
+        <button class="key" onclick="ins('sin(')">sin</button>
+        <button class="key" onclick="ins('cos(')">cos</button>
+        <button class="key" onclick="ins('tan(')">tan</button>
+        <button class="key var" onclick="ins('pi')">π</button>
+        <button class="key var" onclick="ins('e')">e</button>
         
-        <button class="key fn" onclick="insert('log(')">log</button>
-        <button class="key fn" onclick="insert('sqrt(')">√</button>
-        <button class="key fn" onclick="insert('floor(')">[ ]</button>
-        <button class="key" onclick="insert('pi')">π</button>
-        
-        <button class="key" onclick="insert('(')">(</button>
-        <button class="key" onclick="insert(')')">)</button>
-        <button class="key" onclick="insert('x')">x</button>
-        <button class="key" onclick="backspace()">⌫</button>
+        <!-- Row 2 -->
+        <button class="key" onclick="ins('asin(')">sin⁻¹</button>
+        <button class="key" onclick="ins('acos(')">cos⁻¹</button>
+        <button class="key" onclick="ins('atan(')">tan⁻¹</button>
+        <button class="key" onclick="ins('^')">xʸ</button>
+        <button class="key" onclick="ins('sqrt(')">√</button>
+
+        <!-- Row 3 -->
+        <button class="key num" onclick="ins('7')">7</button>
+        <button class="key num" onclick="ins('8')">8</button>
+        <button class="key num" onclick="ins('9')">9</button>
+        <button class="key op" onclick="ins('/')">÷</button>
+        <button class="key" onclick="ins('ln(')">ln</button>
+
+        <!-- Row 4 -->
+        <button class="key num" onclick="ins('4')">4</button>
+        <button class="key num" onclick="ins('5')">5</button>
+        <button class="key num" onclick="ins('6')">6</button>
+        <button class="key op" onclick="ins('*')">×</button>
+        <button class="key" onclick="ins('log10(')">log</button>
+
+        <!-- Row 5 -->
+        <button class="key num" onclick="ins('1')">1</button>
+        <button class="key num" onclick="ins('2')">2</button>
+        <button class="key num" onclick="ins('3')">3</button>
+        <button class="key op" onclick="ins('-')">−</button>
+        <button class="key" onclick="ins('abs(')">|x|</button>
+
+        <!-- Row 6 -->
+        <button class="key num" onclick="ins('0')">0</button>
+        <button class="key num" onclick="ins('.')">.</button>
+        <button class="key var" onclick="ins('x')">x</button>
+        <button class="key op" onclick="ins('+')">+</button>
+        <button class="key op" onclick="ins('(')">(</button>
+
+        <!-- Row 7 -->
+        <button class="key del" onclick="del()">DEL</button>
+        <button class="key op" onclick="ins(')')">)</button>
+        <button class="key go" onclick="render()">GRAPH ↵</button>
     </div>
 
-    <span class="label">VARIABLE REACTOR</span>
-    <div id="variables">
-        <!-- Sliders appear here -->
-        <div style="color: #555; font-size: 12px; text-align: center; margin-top: 20px;">No variables detected</div>
+    <div class="header" style="margin-top: 10px; border-top: 1px solid #333; padding-top: 10px;">
+        <span>PARAMETERS</span>
     </div>
+    <div id="var-zone" class="var-zone"></div>
 </div>
 
-<!-- MAIN VIEWPORT -->
-<div class="viewport">
-    <div class="coords" id="coord-box">x: 0.00, y: 0.00</div>
-    <canvas id="graph"></canvas>
-    
-    <div class="zoom-controls">
-        <button class="fab" onclick="resetView()">⟲</button>
-        <button class="fab" onclick="zoom(1.2)">+</button>
-        <button class="fab" onclick="zoom(0.8)">−</button>
+<div class="viewport" id="vp">
+    <canvas id="canvas"></canvas>
+    <div class="hud-coords" id="coords">x: 0, y: 0</div>
+    <div class="controls">
+        <button class="btn-icon" onclick="resetView()">⌖</button>
+        <button class="btn-icon" onclick="zoom(1.2)">+</button>
+        <button class="btn-icon" onclick="zoom(0.8)">−</button>
     </div>
 </div>
 
 <script>
-    const canvas = document.getElementById('graph');
-    const ctx = canvas.getContext('2d');
-    const input = document.getElementById('eq-input');
-    const varBox = document.getElementById('variables');
+    // --- CORE CONFIG ---
+    const cvs = document.getElementById('canvas');
+    const ctx = cvs.getContext('2d');
+    const inp = document.getElementById('input');
+    const stat = document.getElementById('status');
+    
+    let view = { x: 0, y: 0, scale: 50 }; // View center (world coords), scale (px per unit)
+    let vars = {}; // Variable store
+    let drag = { active: false, lx: 0, ly: 0 };
 
-    // --- ENGINE STATE ---
-    let state = {
-        scale: 40, // Pixels per unit
-        offsetX: 0, 
-        offsetY: 0,
-        variables: {}, // Stores values for m, c, a, etc.
-        isDragging: false,
-        lastMouse: {x: 0, y: 0}
-    };
-
-    // --- INITIALIZATION ---
+    // --- RESIZE ---
     function resize() {
-        canvas.width = canvas.parentElement.clientWidth;
-        canvas.height = canvas.parentElement.clientHeight;
-        state.offsetX = canvas.width / 2;
-        state.offsetY = canvas.height / 2;
-        draw();
+        cvs.width = cvs.parentElement.clientWidth;
+        cvs.height = cvs.parentElement.clientHeight;
+        render();
     }
     window.addEventListener('resize', resize);
 
-    // --- INPUT HANDLING ---
-    function insert(txt) {
-        let curPos = input.selectionStart;
-        let val = input.value;
-        input.value = val.slice(0, curPos) + txt + val.slice(input.selectionEnd);
-        input.focus();
-        input.setSelectionRange(curPos + txt.length, curPos + txt.length);
-        parseAndDraw();
-    }
-
-    function backspace() {
-        let curPos = input.selectionStart;
-        if (curPos === 0) return;
-        let val = input.value;
-        input.value = val.slice(0, curPos - 1) + val.slice(curPos);
-        input.focus();
-        input.setSelectionRange(curPos - 1, curPos - 1);
-        parseAndDraw();
-    }
-
-    input.addEventListener('input', parseAndDraw);
-
-    // --- THE VARIABLE REACTOR ---
-    function updateVariables(node) {
-        // 1. Extract symbols from the MathJS node tree
-        let symbols = new Set();
-        node.traverse(function (node, path, parent) {
-            if (node.type === 'SymbolNode' && node.name !== 'x' && node.name !== 'e' && node.name !== 'pi') {
-                if (!math[node.name]) { // Ignore built-ins like sin/cos if parsed as symbol
-                    symbols.add(node.name);
-                }
+    // --- MATH PARSING ---
+    function updateVars(node) {
+        let found = new Set();
+        node.traverse(n => {
+            if (n.isSymbolNode && !['x','e','pi'].includes(n.name) && !math[n.name]) {
+                found.add(n.name);
             }
         });
-
-        // 2. Sync State
-        let currentVars = Object.keys(state.variables);
-        let newVars = Array.from(symbols);
+        
+        let zone = document.getElementById('var-zone');
         let needsUpdate = false;
-
-        // Check for changes
-        if (currentVars.length !== newVars.length) needsUpdate = true;
-        else {
-            for(let v of newVars) if(!state.variables.hasOwnProperty(v)) needsUpdate = true;
-        }
+        
+        // Check consistency
+        let current = Object.keys(vars);
+        let next = Array.from(found).sort();
+        if (JSON.stringify(current) !== JSON.stringify(next)) needsUpdate = true;
 
         if (needsUpdate) {
-            varBox.innerHTML = '';
-            if (newVars.length === 0) {
-                varBox.innerHTML = '<div style="color: #555; font-size: 12px; text-align: center; margin-top: 20px;">No variables detected</div>';
-            }
+            zone.innerHTML = '';
+            if (next.length === 0) zone.innerHTML = '<div style="color:#444;font-size:11px;text-align:center;padding:10px;">No variables detected</div>';
             
-            newVars.sort().forEach(v => {
-                if (!state.variables[v]) state.variables[v] = 1; // Default value
-                
+            next.forEach(v => {
+                if (vars[v] === undefined) vars[v] = 1;
                 let row = document.createElement('div');
                 row.className = 'var-row';
                 row.innerHTML = `
-                    <span class="var-name">${v}</span>
-                    <input type="range" min="-10" max="10" step="0.1" value="${state.variables[v]}" oninput="setVar('${v}', this.value)">
-                    <span class="var-val" id="val-${v}">${state.variables[v]}</span>
+                    <span class="var-label">${v}</span>
+                    <input type="range" min="-5" max="5" step="0.01" value="${vars[v]}" oninput="setVar('${v}', this.value)">
+                    <span style="width:35px;text-align:right">${vars[v]}</span>
                 `;
-                varBox.appendChild(row);
+                zone.appendChild(row);
             });
+            // Clean old
+            for(let k in vars) if(!found.has(k)) delete vars[k];
         }
     }
+    window.setVar = (k,v) => { vars[k] = parseFloat(v); render(); };
 
-    window.setVar = (name, val) => {
-        state.variables[name] = parseFloat(val);
-        document.getElementById(`val-${name}`).innerText = val;
-        draw(); // Re-draw instantly
-    };
-
-    // --- CORE GRAPHING ENGINE ---
-    function parseAndDraw() {
-        try {
-            const expr = input.value;
-            if (!expr) return;
-            const node = math.parse(expr);
-            const code = node.compile();
-            
-            // Update UI for variables
-            updateVariables(node);
-
-            draw(code);
-        } catch (e) {
-            // console.log("Incomplete Expression");
-        }
-    }
-
-    function draw(compiledFunc) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function render() {
+        // 1. Clear
+        ctx.fillStyle = "#121212";
+        ctx.fillRect(0, 0, cvs.width, cvs.height);
         
-        // 1. Draw Grid
+        // 2. Grid
         drawGrid();
 
-        // 2. Draw Function
-        if (!compiledFunc && input.value) {
-             try { compiledFunc = math.compile(input.value); } catch(e) { return; }
+        // 3. Parse & Draw
+        let expr = inp.value.trim();
+        if(!expr) return;
+        if(expr.includes('=')) expr = expr.split('=')[1]; // Handle y=...
+
+        try {
+            const node = math.parse(expr);
+            const code = node.compile();
+            updateVars(node);
+            
+            stat.innerText = "RENDERING"; stat.className = "status";
+            drawGraph(code);
+            
+        } catch(e) {
+            stat.innerText = "SYNTAX ERROR"; stat.className = "status err";
         }
-        if (!compiledFunc) return;
+    }
 
+    function drawGraph(func) {
         ctx.beginPath();
-        ctx.strokeStyle = '#2f81f7';
+        ctx.strokeStyle = "#007acc";
         ctx.lineWidth = 2;
-
-        // Scope includes x and all dynamic variables
-        let scope = { ...state.variables }; 
-
-        let started = false;
-        // Iterate pixels across the screen
-        for (let px = 0; px < canvas.width; px += 2) { // Step 2px for speed
-            // Screen X -> World X
-            let x = (px - state.offsetX) / state.scale;
-            scope.x = x;
-
+        
+        let scope = { ...vars };
+        let w = cvs.width, h = cvs.height;
+        let cx = w/2, cy = h/2;
+        
+        // DRAW LOOP
+        let prevY = null;
+        
+        for (let px = 0; px <= w; px += 1) { // High Res
+            // Screen -> World
+            let worldX = (px - cx) / view.scale + view.x;
+            scope.x = worldX;
+            
             try {
-                let y = compiledFunc.evaluate(scope);
+                let worldY = func.evaluate(scope);
                 
-                // World Y -> Screen Y
-                // Note: Canvas Y is inverted (0 is top)
-                let py = state.offsetY - (y * state.scale);
+                // Handle Math Errors (like sqrt(-1) or log(-1))
+                if (isNaN(worldY) || !isFinite(worldY)) {
+                    // Check if we need to draw asymptote line
+                    // For log(x), as x->0, y->-Infinity. 
+                    // We clamp it for visual continuity.
+                    if (prevY !== null) {
+                        // If prev point was valid, draw off-screen
+                        let clampY = (prevY < cy) ? -h*2 : h*2;
+                        // ctx.lineTo(px, clampY); // Optional: Draw vertical asymptote
+                    }
+                    prevY = null;
+                    continue;
+                }
 
-                // DISCONTINUITY CHECK (The "Great Integer" Fix)
-                // If the jump is too big (vertical line), lift the pen
-                if (started) {
-                    // Get previous point
-                    // (We could cache it, but let's check boundary)
-                    if (Math.abs(py - ctx.currentY) > canvas.height) { 
-                        // Massive jump (likely asymptotic or tan(x)), don't draw line
-                        ctx.moveTo(px, py);
+                // World -> Screen
+                let py = cy - (worldY - view.y) * view.scale;
+
+                // CLAMPING (The "Pure Length" Fix)
+                // If y is way off screen, clamp it so lineTo draws to the edge
+                let clampedY = py;
+                if (py < -h) clampedY = -h;
+                if (py > h*2) clampedY = h*2;
+
+                if (prevY === null) {
+                    ctx.moveTo(px, clampedY);
+                } else {
+                    // Discontinuity Check (e.g. tan(x))
+                    if (Math.abs(py - prevY) > h) {
+                        ctx.moveTo(px, py); // Lift pen
                     } else {
                         ctx.lineTo(px, py);
                     }
-                } else {
-                    ctx.moveTo(px, py);
-                    started = true;
                 }
-                
-                // Hack to track previous Y for Discontinuity Check
-                ctx.currentY = py;
+                prevY = py;
 
-            } catch (e) {
-                started = false; // Gap in domain (e.g. sqrt(-1))
-            }
+            } catch(e) { prevY = null; }
         }
         ctx.stroke();
     }
 
     function drawGrid() {
-        ctx.strokeStyle = '#30363d';
-        ctx.lineWidth = 1;
-        ctx.font = "10px Inter";
-        ctx.fillStyle = "#8b949e";
-
-        let startX = -state.offsetX / state.scale;
-        let endX = (canvas.width - state.offsetX) / state.scale;
-        let startY = -(canvas.height - state.offsetY) / state.scale; // Bottom (since Y inverted)
-        let endY = state.offsetY / state.scale; // Top
-
-        // Vertical Lines (X-Axis)
-        // Determine step size based on zoom
+        let cx = cvs.width/2;
+        let cy = cvs.height/2;
+        
+        // Calc Grid Spacing
         let step = 1;
-        if (state.scale > 100) step = 0.5;
-        if (state.scale < 20) step = 5;
+        if (view.scale > 80) step = 0.5;
+        if (view.scale < 30) step = 2;
+        if (view.scale < 10) step = 10;
 
-        // X Grid
-        for (let x = Math.floor(startX/step)*step; x < endX; x += step) {
-            let px = state.offsetX + (x * state.scale);
+        let startX = Math.floor(((0 - cx)/view.scale + view.x)/step)*step;
+        let endX   = Math.ceil(((cvs.width - cx)/view.scale + view.x)/step)*step;
+        let startY = Math.floor(((cy - cvs.height)/view.scale + view.y)/step)*step;
+        let endY   = Math.ceil(((cy - 0)/view.scale + view.y)/step)*step;
+
+        ctx.lineWidth = 1;
+        ctx.font = "10px Roboto Mono";
+        ctx.textAlign = "center";
+        
+        // Draw
+        for (let x = startX; x <= endX; x+=step) {
+            let px = cx + (x - view.x) * view.scale;
             ctx.beginPath();
-            ctx.moveTo(px, 0); ctx.lineTo(px, canvas.height);
+            ctx.strokeStyle = (Math.abs(x) < 1e-10) ? "#fff" : (Math.abs(x)%5===0 ? "#555" : "#333");
+            ctx.moveTo(px, 0); ctx.lineTo(px, cvs.height);
             ctx.stroke();
-            // Labels
-            if (Math.abs(x) > 0.001) ctx.fillText(x.toFixed(1).replace('.0',''), px + 4, state.offsetY + 12);
+            if(Math.abs(x) > 1e-10) {
+                ctx.fillStyle = "#888"; ctx.fillText(parseFloat(x.toFixed(2)), px, cy + 15);
+            }
         }
-
-        // Y Grid
-        for (let y = Math.floor(-endY/step)*step; y < -startY; y += step) {
-            let py = state.offsetY - (y * state.scale);
+        for (let y = startY; y <= endY; y+=step) {
+            let py = cy - (y - view.y) * view.scale;
             ctx.beginPath();
-            ctx.moveTo(0, py); ctx.lineTo(canvas.width, py);
+            ctx.strokeStyle = (Math.abs(y) < 1e-10) ? "#fff" : (Math.abs(y)%5===0 ? "#555" : "#333");
+            ctx.moveTo(0, py); ctx.lineTo(cvs.width, py);
             ctx.stroke();
-            // Labels
-            if (Math.abs(y) > 0.001) ctx.fillText(y.toFixed(1).replace('.0',''), state.offsetX + 4, py - 4);
+            if(Math.abs(y) > 1e-10) {
+                ctx.fillStyle = "#888"; ctx.fillText(parseFloat(y.toFixed(2)), cx - 15, py + 3);
+            }
         }
-
-        // Axes
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, state.offsetY); ctx.lineTo(canvas.width, state.offsetY); // X Axis
-        ctx.moveTo(state.offsetX, 0); ctx.lineTo(state.offsetX, canvas.height); // Y Axis
-        ctx.stroke();
     }
 
-    // --- INTERACTION (PAN & ZOOM) ---
-    canvas.addEventListener('mousedown', e => {
-        state.isDragging = true;
-        state.lastMouse = { x: e.clientX, y: e.clientY };
-    });
-
-    window.addEventListener('mouseup', () => state.isDragging = false);
-
-    canvas.addEventListener('mousemove', e => {
-        // 1. Pan
-        if (state.isDragging) {
-            let dx = e.clientX - state.lastMouse.x;
-            let dy = e.clientY - state.lastMouse.y;
-            state.offsetX += dx;
-            state.offsetY += dy;
-            state.lastMouse = { x: e.clientX, y: e.clientY };
-            draw();
-        }
-
-        // 2. Coordinate Tracker
-        let rect = canvas.getBoundingClientRect();
-        let mx = e.clientX - rect.left;
-        let my = e.clientY - rect.top;
-        let wx = (mx - state.offsetX) / state.scale;
-        let wy = (state.offsetY - my) / state.scale;
-        document.getElementById('coord-box').innerText = `x: ${wx.toFixed(2)}, y: ${wy.toFixed(2)}`;
-    });
-
-    // Zoom
-    function zoom(factor) {
-        state.scale *= factor;
-        draw();
+    // --- CONTROLS ---
+    function ins(txt) {
+        let start = inp.selectionStart;
+        inp.value = inp.value.slice(0, start) + txt + inp.value.slice(inp.selectionEnd);
+        inp.focus();
+        inp.setSelectionRange(start + txt.length, start + txt.length);
+        render();
     }
+    function del() {
+        let start = inp.selectionStart;
+        if(start>0) {
+            inp.value = inp.value.slice(0, start-1) + inp.value.slice(start);
+            inp.focus();
+            inp.setSelectionRange(start-1, start-1);
+            render();
+        }
+    }
+
+    // --- NAV ---
+    cvs.addEventListener('mousedown', e => {
+        drag.active = true;
+        drag.lx = e.clientX; drag.ly = e.clientY;
+    });
+    window.addEventListener('mouseup', () => drag.active = false);
+    window.addEventListener('mousemove', e => {
+        // Pan
+        if(drag.active) {
+            let dx = (e.clientX - drag.lx) / view.scale;
+            let dy = (e.clientY - drag.ly) / view.scale;
+            view.x -= dx; view.y += dy;
+            drag.lx = e.clientX; drag.ly = e.clientY;
+            render();
+        }
+        // Coords
+        let cx = cvs.width/2, cy = cvs.height/2;
+        let wx = (e.clientX - cvs.getBoundingClientRect().left - cx) / view.scale + view.x;
+        let wy = (cy - (e.clientY - cvs.getBoundingClientRect().top)) / view.scale + view.y;
+        document.getElementById('coords').innerText = `x: ${wx.toFixed(2)}, y: ${wy.toFixed(2)}`;
+    });
     
-    function resetView() {
-        state.scale = 40;
-        state.offsetX = canvas.width / 2;
-        state.offsetY = canvas.height / 2;
-        draw();
-    }
-
-    canvas.addEventListener('wheel', e => {
+    // Zoom
+    function zoom(f) { view.scale *= f; render(); }
+    function resetView() { view.x=0; view.y=0; view.scale=50; render(); }
+    cvs.addEventListener('wheel', e => {
         e.preventDefault();
         zoom(e.deltaY < 0 ? 1.1 : 0.9);
-    });
+    }, {passive:false});
 
-    // Init
-    resize();
-    parseAndDraw();
+    // --- INIT ---
+    inp.addEventListener('input', render);
+    window.onload = resize;
 
 </script>
 </body>
