@@ -2,344 +2,331 @@ from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
-# --- NEWTON v4: PRECISION ENGINE ---
+# --- NEWTON v6: HYBRID CALCULATOR & GRAPHER ---
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Newton v4 | Precision Graph</title>
+    <title>Newton v6 | Hybrid Engine</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
     <style>
-        /* CLEAN, MINIMALIST UI */
-        :root { --bg: #ffffff; --sidebar: #f4f4f5; --accent: #2563eb; --text: #18181b; --grid: #e4e4e7; --border: #d4d4d8; }
+        :root { --bg: #ffffff; --panel: #f3f4f6; --accent: #2563eb; --text: #1f2937; --border: #e5e7eb; }
         body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; display: flex; height: 100vh; overflow: hidden; }
         
         /* SIDEBAR */
-        .sidebar { width: 320px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px; z-index: 10; box-shadow: 2px 0 10px rgba(0,0,0,0.05); }
+        .sidebar { width: 360px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 15px; z-index: 10; box-shadow: 4px 0 15px rgba(0,0,0,0.05); }
         
-        .title { font-weight: 800; font-size: 14px; letter-spacing: 1px; margin-bottom: 20px; color: #52525b; text-transform: uppercase; }
-        
-        /* INPUT BOX */
-        .input-container { position: relative; margin-bottom: 10px; }
-        .input-label { position: absolute; left: 12px; top: 11px; color: var(--accent); font-weight: 700; font-family: 'JetBrains Mono'; font-size: 14px; pointer-events: none; }
-        input[type="text"] {
-            width: 100%; padding: 10px 10px 10px 50px; border: 1px solid var(--border); border-radius: 6px;
-            font-family: 'JetBrains Mono', monospace; font-size: 16px; outline: none; box-sizing: border-box;
-            background: white; color: #000; transition: 0.2s;
+        /* RESULT DISPLAY (New Feature) */
+        .display-box {
+            background: white; border: 1px solid var(--border); border-radius: 8px; padding: 15px;
+            margin-bottom: 15px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
         }
-        input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-        
-        /* STATUS & HELP */
-        #status { font-size: 11px; margin-top: 5px; font-weight: 600; min-height: 15px; }
-        .ok { color: #16a34a; }
-        .err { color: #dc2626; }
-        
-        .tips { font-size: 11px; color: #71717a; margin-top: 5px; line-height: 1.4; }
+        .input-row { display: flex; align-items: center; margin-bottom: 5px; }
+        .fn-label { font-family: 'JetBrains Mono'; font-weight: bold; color: #9ca3af; margin-right: 10px; font-size: 14px; }
+        input[type="text"] {
+            width: 100%; border: none; outline: none; font-family: 'JetBrains Mono'; font-size: 18px; background: transparent; color: #333;
+        }
+        .result-row { text-align: right; font-family: 'JetBrains Mono'; font-size: 24px; font-weight: bold; color: var(--accent); height: 30px; overflow: hidden; }
+        .mode-badge { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #6b7280; font-weight: 600; }
+
+        /* KEYPAD GRID */
+        .keypad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 15px; }
+        .btn {
+            background: white; border: 1px solid #d1d5db; border-radius: 6px; padding: 12px 0;
+            font-family: 'Inter'; font-weight: 600; font-size: 13px; color: #374151; cursor: pointer;
+            transition: 0.1s; user-select: none;
+        }
+        .btn:active { background: var(--accent); color: white; border-color: var(--accent); transform: translateY(1px); }
+        .btn.dark { background: #e5e7eb; }
+        .btn.blue { color: var(--accent); font-weight: 800; }
+        .btn.wide { grid-column: span 2; background: var(--accent); color: white; border-color: var(--accent); }
 
         /* VARIABLES */
-        #var-list { flex: 1; overflow-y: auto; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 10px; }
-        .var-item { display: flex; align-items: center; margin-bottom: 12px; font-family: 'JetBrains Mono'; font-size: 12px; }
-        .var-label { width: 20px; font-weight: bold; color: var(--accent); }
+        #var-list { flex: 1; overflow-y: auto; border-top: 1px solid var(--border); padding-top: 10px; }
+        .var-row { display: flex; align-items: center; margin-bottom: 10px; font-size: 13px; font-family: 'JetBrains Mono'; }
+        .var-name { width: 25px; color: var(--accent); font-weight: bold; }
         input[type="range"] { flex: 1; margin: 0 10px; accent-color: var(--accent); cursor: pointer; }
-        .var-val { width: 40px; text-align: right; color: #555; }
-
-        /* CANVAS */
-        .main { flex: 1; position: relative; cursor: crosshair; }
+        
+        /* MAIN CANVAS */
+        .viewport { flex: 1; position: relative; cursor: crosshair; background: #fff; }
         canvas { display: block; width: 100%; height: 100%; }
-        
-        /* HUD */
-        .coords { position: absolute; bottom: 15px; left: 15px; background: rgba(255,255,255,0.9); padding: 6px 10px; border-radius: 4px; font-family: 'JetBrains Mono'; font-size: 12px; border: 1px solid var(--border); pointer-events: none; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        
-        .reset-btn { position: absolute; top: 15px; right: 15px; background: white; border: 1px solid var(--border); padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); transition: 0.2s; }
-        .reset-btn:hover { background: #f4f4f5; }
-
+        .hud { position: absolute; bottom: 20px; left: 20px; background: rgba(255,255,255,0.9); padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; font-family: 'JetBrains Mono'; font-size: 11px; pointer-events: none; }
+        .reset-btn { position: absolute; top: 20px; right: 20px; padding: 8px 12px; background: white; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
     </style>
 </head>
 <body>
 
 <div class="sidebar">
-    <div class="title">Precision Grapher</div>
-    
-    <div class="input-container">
-        <span class="input-label">y =</span>
-        <input type="text" id="input" value="x^2 - 4" placeholder="Type Math..." spellcheck="false">
+    <!-- CALCULATOR SCREEN -->
+    <div class="display-box">
+        <div class="input-row">
+            <span class="fn-label">f =</span>
+            <input type="text" id="input" value="tan(pi/3)" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="result-row" id="result">1.732...</div>
+        <div class="mode-badge" id="mode">CALCULATOR MODE</div>
     </div>
-    <div id="status" class="ok">Ready</div>
-    <div class="tips">
-        Try: <span style="font-family:'JetBrains Mono'">sin(x)</span>, <span style="font-family:'JetBrains Mono'">2x + 1</span>, <span style="font-family:'JetBrains Mono'">log(x)</span><br>
-        * Auto-multiplication enabled (2x → 2*x)
+
+    <!-- SCIENTIFIC KEYPAD -->
+    <div class="keypad">
+        <button class="btn blue" onclick="ins('sin(')">sin</button>
+        <button class="btn blue" onclick="ins('cos(')">cos</button>
+        <button class="btn blue" onclick="ins('tan(')">tan</button>
+        <button class="btn" onclick="ins('pi')">π</button>
+        <button class="btn" onclick="ins('e')">e</button>
+
+        <button class="btn" onclick="ins('^')">^</button>
+        <button class="btn" onclick="ins('sqrt(')">√</button>
+        <button class="btn" onclick="ins('(')">(</button>
+        <button class="btn" onclick="ins(')')">)</button>
+        <button class="btn dark" onclick="bs()">⌫</button>
+
+        <button class="btn" onclick="ins('7')">7</button>
+        <button class="btn" onclick="ins('8')">8</button>
+        <button class="btn" onclick="ins('9')">9</button>
+        <button class="btn dark" onclick="ins('/')">÷</button>
+        <button class="btn dark" onclick="ins('*')">×</button>
+
+        <button class="btn" onclick="ins('4')">4</button>
+        <button class="btn" onclick="ins('5')">5</button>
+        <button class="btn" onclick="ins('6')">6</button>
+        <button class="btn dark" onclick="ins('-')">−</button>
+        <button class="btn dark" onclick="ins('+')">+</button>
+
+        <button class="btn" onclick="ins('1')">1</button>
+        <button class="btn" onclick="ins('2')">2</button>
+        <button class="btn" onclick="ins('3')">3</button>
+        <button class="btn wide" onclick="render()">ENTER</button>
+
+        <button class="btn" onclick="ins('0')">0</button>
+        <button class="btn" onclick="ins('.')">.</button>
+        <button class="btn blue" onclick="ins('x')">x</button>
     </div>
 
     <div id="var-list"></div>
 </div>
 
-<div class="main">
+<div class="viewport">
     <canvas id="canvas"></canvas>
-    <div class="coords" id="coords">x: 0.0, y: 0.0</div>
-    <button class="reset-btn" onclick="resetView()">Recenter View</button>
+    <div class="hud" id="coords">x: 0.00, y: 0.00</div>
+    <button class="reset-btn" onclick="resetView()">⌖ Center Graph</button>
 </div>
 
 <script>
     const cvs = document.getElementById('canvas');
     const ctx = cvs.getContext('2d');
     const inp = document.getElementById('input');
-    const stat = document.getElementById('status');
-    
-    // ENGINE STATE
+    const resDisplay = document.getElementById('result');
+    const modeDisplay = document.getElementById('mode');
+    const varList = document.getElementById('var-list');
+
     let state = {
-        scale: 40, // Pixels per unit
-        cx: 0, cy: 0, // Center in Pixels (calculated on resize)
-        xOffset: 0, yOffset: 0, // Pan offset in Pixels
-        vars: {},
-        dragging: false,
-        lx: 0, ly: 0
+        scale: 40,
+        cx: 0, cy: 0, // Center in pixels
+        offX: 0, offY: 0, // Pan offset
+        vars: { m:1, c:0 },
+        drag: false, lx:0, ly:0
     };
 
-    // --- 1. ROBUST INPUT SANITIZATION ---
-    function cleanInput(expr) {
-        if (!expr) return "";
-        // Remove 'y=' or 'f(x)='
-        if (expr.includes('=')) expr = expr.split('=')[1];
-        
-        // Auto-Multiply: 2x -> 2*x, x sin(x) -> x*sin(x), (x+1)(x-1) -> (x+1)*(x-1)
-        // Regex looks for: Number/Paren followed immediately by Letter/Paren
-        expr = expr.replace(/(\d|\))(?=[a-z]|\()/gi, '$1*');
-        
-        return expr;
-    }
-
-    // --- 2. PARSER & VARIABLE DETECTOR ---
-    function updateVars(node) {
-        let found = new Set();
-        node.traverse(n => {
-            // Find symbols that are NOT built-in math functions
-            if (n.isSymbolNode && !['x', 'e', 'pi'].includes(n.name) && typeof math[n.name] !== 'function') {
-                found.add(n.name);
-            }
-        });
-        
-        // Sync UI
-        const list = document.getElementById('var-list');
-        const current = Object.keys(state.vars);
-        const next = Array.from(found).sort();
-
-        if (JSON.stringify(current) !== JSON.stringify(next)) {
-            list.innerHTML = '';
-            if (next.length === 0) list.innerHTML = '<div style="text-align:center; color:#999; font-size:11px; margin-top:10px;">No dynamic variables</div>';
-            
-            next.forEach(v => {
-                if (state.vars[v] === undefined) state.vars[v] = 1.0;
-                let div = document.createElement('div');
-                div.className = 'var-item';
-                div.innerHTML = `
-                    <span class="var-label">${v}</span>
-                    <input type="range" min="-5" max="5" step="0.1" value="${state.vars[v]}" oninput="setVar('${v}', this.value)">
-                    <span class="var-val">${state.vars[v]}</span>
-                `;
-                list.appendChild(div);
-            });
-            // Cleanup old keys
-            for (let k in state.vars) if (!found.has(k)) delete state.vars[k];
-        }
-    }
-    window.setVar = (k, v) => { state.vars[k] = parseFloat(v); render(); };
-
-    // --- 3. RENDERING CORE ---
+    // --- 1. HYBRID LOGIC (Graph vs Calc) ---
     function render() {
-        // Clear
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, cvs.width, cvs.height);
-        
-        drawGrid();
-        
         let raw = inp.value.trim();
-        if (!raw) return;
+        if(!raw) return;
+
+        // Sanitize
+        let clean = raw.replace('π', 'pi'); // Allow symbol pasting
+        clean = clean.replace(/(\d|\))(?=[a-z]|\()/gi, '$1*'); // 2x -> 2*x
+        clean = clean.replace(/\b([a-z])x\b/gi, '$1*x'); // mx -> m*x
 
         try {
-            let clean = cleanInput(raw);
             const node = math.parse(clean);
             const code = node.compile();
-            updateVars(node);
             
-            stat.innerText = "Graphing: " + clean;
-            stat.className = "ok";
-            
-            drawCurve(code);
+            // DETECT MODE: Does it have 'x' or unknown variables?
+            // We treat 'x' specifically as the graphing variable.
+            let symbols = new Set();
+            node.traverse(n => {
+                if (n.isSymbolNode && !math[n.name]) symbols.add(n.name);
+            });
+
+            // Update Sliders
+            updateSliders(symbols);
+
+            if (symbols.has('x')) {
+                // GRAPH MODE
+                modeDisplay.innerText = "GRAPHING MODE";
+                modeDisplay.style.color = "#2563eb";
+                resDisplay.innerText = "f(x)";
+                drawGraph(code);
+            } else {
+                // CALCULATOR MODE
+                modeDisplay.innerText = "CALCULATOR MODE";
+                modeDisplay.style.color = "#16a34a";
+                
+                // Evaluate logic
+                let scope = { ...state.vars };
+                // pi and e are handled by mathjs automatically
+                let val = code.evaluate(scope);
+                
+                // Format Output
+                let out = parseFloat(val.toFixed(8)); // Precision
+                if (Math.abs(val) > 1e10) out = "Infinity";
+                resDisplay.innerText = "= " + out;
+                
+                // Clear Canvas for Calc Mode
+                ctx.fillStyle = "#fff";
+                ctx.fillRect(0,0,cvs.width,cvs.height);
+                drawGrid(true); // Draw faint grid
+            }
+
         } catch (e) {
-            stat.innerText = "Error: " + e.message.split('(')[0]; // Short error
-            stat.className = "err";
+            resDisplay.innerText = "Error";
+            modeDisplay.innerText = "SYNTAX ERROR";
+            modeDisplay.style.color = "#dc2626";
         }
     }
 
-    function drawCurve(func) {
+    // --- 2. GRAPHING ENGINE ---
+    function drawGraph(func) {
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0,0,cvs.width,cvs.height);
+        drawGrid(false);
+
         ctx.beginPath();
-        ctx.strokeStyle = "#2563eb"; // Blue
-        ctx.lineWidth = 2;
-        ctx.lineJoin = "round";
-
-        let w = cvs.width;
-        let h = cvs.height;
-        let scope = { ...state.vars };
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 2.5;
         
-        let started = false;
+        let w = cvs.width, h = cvs.height;
+        let scope = { ...state.vars };
         let prevY = NaN;
+        let started = false;
 
-        // Step Size: 1px is standard, 0.5px is high precision
-        // We stick to 1px for speed, but handle jumps carefully
-        for (let px = 0; px <= w; px++) {
-            // Screen X -> Math X
-            // formula: (px - center_x - offset_x) / scale
-            let x = (px - state.cx - state.xOffset) / state.scale;
+        for(let px=0; px<=w; px++) {
+            let x = (px - state.cx - state.offX) / state.scale;
             scope.x = x;
-
             try {
                 let y = func.evaluate(scope);
-                
-                // Math Y -> Screen Y
-                // formula: center_y + offset_y - (y * scale)  [Minus because Screen Y is inverted]
-                let py = state.cy + state.yOffset - (y * state.scale);
+                let py = state.cy + state.offY - (y * state.scale);
 
-                // Check for validity
-                if (isNaN(py) || !isFinite(py) || Math.abs(y) > 1e6) {
-                    started = false;
-                    prevY = NaN;
-                    continue;
-                }
+                if(!isFinite(py)) { started=false; prevY=NaN; continue; }
 
-                // ASYMPTOTE DETECTION
-                // If the jump from prevY to currentY is massive (greater than screen height),
-                // it's likely a vertical asymptote (like tan(x) or 1/x). Don't connect.
-                if (started && Math.abs(py - prevY) > h) {
+                // Asymptote Check
+                if(started && Math.abs(py - prevY) > h) {
                     ctx.moveTo(px, py);
-                } else if (!started) {
+                } else if(!started) {
                     ctx.moveTo(px, py);
-                    started = true;
+                    started=true;
                 } else {
                     ctx.lineTo(px, py);
                 }
                 prevY = py;
-
-            } catch (e) {
-                started = false;
-                prevY = NaN;
-            }
+            } catch(e) { started=false; prevY=NaN; }
         }
         ctx.stroke();
     }
 
-    function drawGrid() {
+    function drawGrid(faint) {
         ctx.lineWidth = 1;
         ctx.font = "10px JetBrains Mono";
-        ctx.fillStyle = "#666";
-        
-        let w = cvs.width;
-        let h = cvs.height;
-        
-        // Dynamic Grid Sizing
-        let step = 1; // Math Units
-        if (state.scale > 80) step = 0.5;
-        if (state.scale < 30) step = 2;
-        if (state.scale < 15) step = 5;
-        if (state.scale < 5) step = 10;
+        ctx.fillStyle = "#999";
+        let w=cvs.width, h=cvs.height;
+        let step = state.scale > 80 ? 0.5 : (state.scale < 30 ? 5 : 1);
 
-        // Visible Range
-        let startX = Math.floor((-state.cx - state.xOffset) / state.scale);
-        let endX = Math.ceil((w - state.cx - state.xOffset) / state.scale);
-        
-        let startY = Math.floor((state.cy + state.yOffset - h) / state.scale);
-        let endY = Math.ceil((state.cy + state.yOffset) / state.scale);
+        let sx = Math.floor((-state.cx - state.offX)/state.scale);
+        let ex = Math.ceil((w - state.cx - state.offX)/state.scale);
+        let sy = Math.floor((state.cy + state.offY - h)/state.scale);
+        let ey = Math.ceil((state.cy + state.offY)/state.scale);
 
         ctx.beginPath();
-        
-        // Vertical Lines (X)
-        for (let x = startX; x <= endX; x++) {
-            if (x % step !== 0) continue;
-            let px = state.cx + state.xOffset + (x * state.scale);
-            
-            // Axis vs Grid
-            if (x === 0) ctx.strokeStyle = "#000"; // Y-Axis
-            else ctx.strokeStyle = "#e4e4e7";
-            
-            ctx.moveTo(px, 0); ctx.lineTo(px, h);
-            
-            // Label
-            if (x !== 0) ctx.fillText(x, px + 2, state.cy + state.yOffset + 12);
+        for(let x=sx; x<=ex; x++) {
+            if(x%step!==0) continue;
+            let px = state.cx + state.offX + x*state.scale;
+            ctx.strokeStyle = (x===0) ? "#000" : (faint ? "#f3f4f6" : "#e5e7eb");
+            ctx.moveTo(px,0); ctx.lineTo(px,h);
+            if(!faint && x!==0) ctx.fillText(x, px+2, state.cy+state.offY+12);
         }
-
-        // Horizontal Lines (Y)
-        for (let y = startY; y <= endY; y++) {
-            if (y % step !== 0) continue;
-            let py = state.cy + state.yOffset - (y * state.scale);
-            
-            if (y === 0) ctx.strokeStyle = "#000"; // X-Axis
-            else ctx.strokeStyle = "#e4e4e7";
-
-            ctx.moveTo(0, py); ctx.lineTo(w, py);
-            
-            // Label
-            if (y !== 0) ctx.fillText(y, state.cx + state.xOffset + 4, py - 2);
+        for(let y=sy; y<=ey; y++) {
+            if(y%step!==0) continue;
+            let py = state.cy + state.offY - y*state.scale;
+            ctx.strokeStyle = (y===0) ? "#000" : (faint ? "#f3f4f6" : "#e5e7eb");
+            ctx.moveTo(0,py); ctx.lineTo(w,py);
+            if(!faint && y!==0) ctx.fillText(y, state.cx+state.offX+4, py-2);
         }
         ctx.stroke();
     }
 
-    // --- 4. NAVIGATION ---
+    // --- 3. UI HELPERS ---
+    function updateSliders(symbols) {
+        let active = Array.from(symbols).filter(s => s !== 'x' && s !== 'pi' && s !== 'e').sort();
+        let current = Object.keys(state.vars);
+        
+        if(JSON.stringify(active) !== JSON.stringify(current.filter(k => active.includes(k)).sort())) {
+            varList.innerHTML = '';
+            active.forEach(v => {
+                if(state.vars[v]===undefined) state.vars[v]=1;
+                let div = document.createElement('div');
+                div.className = 'var-row';
+                div.innerHTML = `
+                    <span class="var-name">${v}</span>
+                    <input type="range" min="-10" max="10" step="0.1" value="${state.vars[v]}" oninput="setVar('${v}', this.value)">
+                    <span>${state.vars[v]}</span>
+                `;
+                varList.appendChild(div);
+            });
+        }
+    }
+    window.setVar = (k,v) => { state.vars[k]=parseFloat(v); render(); };
+
+    // Keypad Logic
+    window.ins = (txt) => {
+        let p = inp.selectionStart;
+        inp.value = inp.value.slice(0,p) + txt + inp.value.slice(inp.selectionEnd);
+        inp.focus();
+        inp.setSelectionRange(p+txt.length, p+txt.length);
+        render();
+    };
+    window.bs = () => {
+        let p = inp.selectionStart;
+        if(p>0) {
+            inp.value = inp.value.slice(0,p-1) + inp.value.slice(p);
+            inp.focus();
+            inp.setSelectionRange(p-1, p-1);
+            render();
+        }
+    };
+
+    // --- 4. EVENTS ---
     function resize() {
         cvs.width = cvs.parentElement.clientWidth;
         cvs.height = cvs.parentElement.clientHeight;
-        state.cx = cvs.width / 2;
-        state.cy = cvs.height / 2;
+        state.cx = cvs.width/2; state.cy = cvs.height/2;
         render();
     }
-    window.addEventListener('resize', resize);
     window.onload = resize;
+    window.onresize = resize;
+    inp.addEventListener('input', render);
 
-    // Mouse Interaction
-    cvs.addEventListener('mousedown', e => {
-        state.dragging = true;
-        state.lx = e.clientX; state.ly = e.clientY;
-    });
-    window.addEventListener('mouseup', () => state.dragging = false);
-    
-    window.addEventListener('mousemove', e => {
-        // Pan
-        if (state.dragging) {
-            state.xOffset += e.clientX - state.lx;
-            state.yOffset += e.clientY - state.ly;
-            state.lx = e.clientX; state.ly = e.clientY;
+    cvs.addEventListener('mousedown', e=>{state.drag=true; state.lx=e.clientX; state.ly=e.clientY;});
+    window.addEventListener('mouseup', ()=>state.drag=false);
+    window.addEventListener('mousemove', e=>{
+        if(state.drag) {
+            state.offX += e.clientX-state.lx; state.offY += e.clientY-state.ly;
+            state.lx=e.clientX; state.ly=e.clientY;
             render();
         }
-        
-        // Coordinates
-        let rect = cvs.getBoundingClientRect();
-        let mx = e.clientX - rect.left;
-        let my = e.clientY - rect.top;
-        let mathX = (mx - state.cx - state.xOffset) / state.scale;
-        let mathY = (state.cy + state.yOffset - my) / state.scale;
-        document.getElementById('coords').innerText = `x: ${mathX.toFixed(2)}, y: ${mathY.toFixed(2)}`;
+        let mx = (e.clientX - cvs.getBoundingClientRect().left - state.cx - state.offX)/state.scale;
+        let my = (state.cy + state.offY - (e.clientY - cvs.getBoundingClientRect().top))/state.scale;
+        document.getElementById('coords').innerText = `x:${mx.toFixed(2)}, y:${my.toFixed(2)}`;
     });
-
-    // Zoom
-    cvs.addEventListener('wheel', e => {
+    cvs.addEventListener('wheel', e=>{
         e.preventDefault();
-        let zoom = e.deltaY < 0 ? 1.1 : 0.9;
-        state.scale *= zoom;
-        // Cap zoom to prevent crashes
-        if (state.scale < 2) state.scale = 2;
-        if (state.scale > 500) state.scale = 500;
+        state.scale *= e.deltaY<0 ? 1.1 : 0.9;
         render();
-    }, {passive: false});
-
-    function resetView() {
-        state.scale = 40;
-        state.xOffset = 0; state.yOffset = 0;
-        render();
-    }
-
-    // Live Update
-    inp.addEventListener('input', render);
+    }, {passive:false});
+    window.resetView = () => { state.scale=40; state.offX=0; state.offY=0; render(); };
 
 </script>
 </body>
@@ -352,4 +339,3 @@ def index():
 
 if __name__ == '__main__':
     app.run(debug=True, port=8080)
-
